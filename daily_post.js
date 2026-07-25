@@ -196,15 +196,25 @@ async function sendToTelegram(imageBuffer, pkg) {
   if (!photoResp.ok) throw new Error("Telegram sendPhoto failed: " + (await photoResp.text()));
 
   const caption = buildCaption(pkg);
-  const extraTags = pkg.hashtags_extra?.join(" ") || "";
-  const followUp = `📋 CAPTION (copy/paste):\n\n${caption}\n\n🏷 Pinned comment tags:\n${extraTags}\n\n🕒 Posting time:\n${postingTimeTable()}`;
 
-  const msgResp = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+  // Message 1: caption ONLY, nothing else, so it's a clean single tap-and-hold copy on mobile
+  const captionResp = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: TG_CHAT_ID, text: followUp })
+    body: JSON.stringify({ chat_id: TG_CHAT_ID, text: caption })
   });
-  if (!msgResp.ok) throw new Error("Telegram sendMessage failed: " + (await msgResp.text()));
+  if (!captionResp.ok) throw new Error("Telegram sendMessage (caption) failed: " + (await captionResp.text()));
+
+  // Message 2: everything else (pinned tags + posting time table)
+  const extraTags = pkg.hashtags_extra?.join(" ") || "";
+  const extrasMsg = `🏷 Pinned comment tags:\n${extraTags}\n\n🕒 Posting time:\n${postingTimeTable()}`;
+
+  const extrasResp = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: TG_CHAT_ID, text: extrasMsg })
+  });
+  if (!extrasResp.ok) throw new Error("Telegram sendMessage (extras) failed: " + (await extrasResp.text()));
 }
 
 // ---------- run ----------
