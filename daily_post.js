@@ -249,14 +249,14 @@ async function buildImage(pkg) {
           font-size="${pollFit.fontSize}" font-weight="800"
           fill="#ffffff" text-anchor="middle">${renderTspans(pollFit.lines, 540, pollLineHeight)}</text>
 
-    <circle cx="220" cy="${buttonsRowY}" r="34" fill="#ffcc00"/>
+    <circle cx="220" cy="${buttonsRowY}" r="34" fill="#2f6fed" stroke="#ffffff" stroke-width="3"/>
     <text x="220" y="${buttonsRowY + 13}" font-family="Arial, sans-serif" font-size="32" text-anchor="middle">👍</text>
     <text x="278" y="${buttonsRowY + 13}" font-family="Arial, sans-serif" font-size="${leftFit.fontSize}" font-weight="800"
           fill="#ffffff" text-anchor="start">${leftFit.lines[0]}</text>
 
     <text x="802" y="${buttonsRowY + 13}" font-family="Arial, sans-serif" font-size="${rightFit.fontSize}" font-weight="800"
           fill="#ffffff" text-anchor="end">${rightFit.lines[0]}</text>
-    <circle cx="860" cy="${buttonsRowY}" r="34" fill="#e0457b"/>
+    <circle cx="860" cy="${buttonsRowY}" r="34" fill="#e0457b" stroke="#ffffff" stroke-width="3"/>
     <text x="860" y="${buttonsRowY + 13}" font-family="Arial, sans-serif" font-size="32" text-anchor="middle">❤️</text>
   </svg>`;
 
