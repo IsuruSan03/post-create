@@ -60,10 +60,10 @@ async function pickTopStory() {
   if (allItems.length === 0) throw new Error("No RSS items fetched from any feed");
 
   allItems.sort((a, b) => scoreItem(b) - scoreItem(a));
-  return allItems[0]; // highest-priority match, or just the first item if nothing matched
+  return allItems[0];
 }
 
-// ---------- 2. Free LLM (Groq) writes the post package from that real headline ----------
+// ---------- 2. Free LLM (Groq) writes the post package ----------
 async function writePostPackage(story) {
   const instruction = `You write posts for a UK political commentary page called "The Honest Brit" (direct, bold, binary YES/NO polls, neutral framing of both sides).
 
@@ -111,9 +111,9 @@ Respond with ONLY raw JSON, no markdown fences, no preamble, in this exact shape
   return JSON.parse(match[0]);
 }
 
-// ---------- 3. Build the square image: pollinations background + SVG overlay ----------
+// ---------- 3. Build the image – "LOCKED AND LOADED" style with 👍 and ❤️ ----------
 async function buildImage(pkg) {
-  // Scene prompt tuned for dark, dramatic backgrounds (adds subtle Union Jack texture)
+  // Dark, dramatic background with subtle Union Jack texture
   const scenePrompt = `${pkg.image_scene}, dark moody background with subtle distressed Union Jack texture, cinematic dramatic lighting, high contrast, no text, no people, no logos, photorealistic, 8k resolution`;
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(scenePrompt)}?width=1080&height=1080&nologo=true&seed=${Date.now() % 1000000}`;
 
@@ -136,7 +136,7 @@ async function buildImage(pkg) {
       </linearGradient>
     </defs>
 
-    <!-- Dark overlay to make text pop over any background -->
+    <!-- Dark overlay to make text pop -->
     <rect width="1080" height="1080" fill="rgba(0,0,0,0.5)"/>
 
     <!-- Main headline (huge, centered, red outline) -->
@@ -145,25 +145,25 @@ async function buildImage(pkg) {
       ${esc(pkg.headline)}
     </text>
 
-    <!-- Poll question (red, slightly smaller) -->
+    <!-- Poll question (red, below headline) -->
     <text x="540" y="520" font-family="Arial, sans-serif" font-size="44" font-weight="700"
           fill="#ff4d4d" text-anchor="middle" textLength="960" lengthAdjust="spacing">
       ${esc(pkg.poll_question)}
     </text>
 
-    <!-- Left option: green check circle + option text -->
+    <!-- Left option: blue circle + 👍 + option text -->
     <g transform="translate(160, 680)">
-      <circle cx="70" cy="70" r="50" fill="#2ecc71" stroke="#fff" stroke-width="4"/>
-      <text x="70" y="96" font-family="Arial, sans-serif" font-size="72" text-anchor="middle" fill="#fff">✔</text>
+      <circle cx="70" cy="70" r="50" fill="#2f6fed" stroke="#fff" stroke-width="4"/>
+      <text x="70" y="96" font-family="Arial, sans-serif" font-size="52" text-anchor="middle" fill="#fff">👍</text>
       <text x="145" y="96" font-family="Arial, sans-serif" font-size="52" font-weight="700" fill="#ffffff">
         ${esc(pkg.left_option)}
       </text>
     </g>
 
-    <!-- Right option: red cross circle + option text -->
+    <!-- Right option: pink circle + ❤️ + option text -->
     <g transform="translate(560, 680)">
-      <circle cx="70" cy="70" r="50" fill="#e74c3c" stroke="#fff" stroke-width="4"/>
-      <text x="70" y="96" font-family="Arial, sans-serif" font-size="72" text-anchor="middle" fill="#fff">✘</text>
+      <circle cx="70" cy="70" r="50" fill="#e0457b" stroke="#fff" stroke-width="4"/>
+      <text x="70" y="96" font-family="Arial, sans-serif" font-size="52" text-anchor="middle" fill="#fff">❤️</text>
       <text x="145" y="96" font-family="Arial, sans-serif" font-size="52" font-weight="700" fill="#ffffff">
         ${esc(pkg.right_option)}
       </text>
@@ -180,7 +180,8 @@ async function buildImage(pkg) {
     .jpeg({ quality: 92 })
     .toBuffer();
 }
-// ---------- 4. Caption text (for copy/paste onto Facebook) ----------
+
+// ---------- 4. Caption – matches the image icons and includes final "BE" ----------
 function buildCaption(pkg) {
   return `🇬🇧 BE HONEST.
 
@@ -197,14 +198,20 @@ Drop your honest take below. No spin. Just the question. 👇
 
 Follow The Honest Brit for the UK's most direct political pulse check. 🇬🇧
 
+BE
+
 ${pkg.hashtags_main.join(" ")}`;
 }
 
+// ---------- Dynamic posting time table (shows actual UK time when script runs) ----------
 function postingTimeTable() {
-  return `| Time Zone | Recommended Time |
+  const now = new Date();
+  const ukTime = now.toLocaleString('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false });
+  const sriTime = now.toLocaleString('en-GB', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: false });
+  return `| Time Zone | Current Time |
 | :--- | :--- |
-| UK (BST) | 5:00 PM – 6:00 PM |
-| Sri Lanka (SLST) | 9:30 PM – 10:30 PM |`;
+| UK (BST/GMT) | ${ukTime} |
+| Sri Lanka (SLST) | ${sriTime} |`;
 }
 
 // ---------- 5. Send to Telegram ----------
@@ -221,7 +228,7 @@ async function sendToTelegram(imageBuffer, pkg) {
 
   const caption = buildCaption(pkg);
 
-  // Message 1: caption ONLY, nothing else, so it's a clean single tap-and-hold copy on mobile
+  // Message 1: caption only (easy to copy)
   const captionResp = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -229,7 +236,7 @@ async function sendToTelegram(imageBuffer, pkg) {
   });
   if (!captionResp.ok) throw new Error("Telegram sendMessage (caption) failed: " + (await captionResp.text()));
 
-  // Message 2: everything else (pinned tags + posting time table)
+  // Message 2: extras (pinned tags + posting time)
   const extraTags = pkg.hashtags_extra?.join(" ") || "";
   const extrasMsg = `🏷 Pinned comment tags:\n${extraTags}\n\n🕒 Posting time:\n${postingTimeTable()}`;
 
