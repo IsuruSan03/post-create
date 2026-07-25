@@ -2,8 +2,18 @@ name: Daily Honest Brit Post
 
 on:
   schedule:
-    # 16:30 UTC ≈ 5:30 PM UK (BST) / 10:00 PM Sri Lanka. Adjust for winter (UK = UTC+0) if you want exact timing.
+    # All times below assume UK Summer Time (BST = UTC+1). In UK winter (UTC+0), everything
+    # here lands ONE HOUR EARLIER in UK local time — shift each cron hour +1 if you want it pinned exactly.
+
+    # Daily baseline evening slot: 16:30 UTC ≈ 5:30 PM UK (every day)
     - cron: "30 16 * * *"
+
+    # Extra evening peak slot on your best days: 18:30 UTC ≈ 7:30 PM UK (Mon=1, Thu=4, Sun=0)
+    - cron: "30 18 * * 1,4,0"
+
+    # Sunday morning "papers" slot: 10:00 UTC ≈ 11:00 AM UK (Sunday only)
+    - cron: "0 10 * * 0"
+
   workflow_dispatch: {}   # lets you also trigger it manually from the Actions tab
 
 jobs:
