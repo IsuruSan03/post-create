@@ -113,13 +113,59 @@ Respond with ONLY raw JSON, no markdown fences, no preamble, in this exact shape
 
 // ---------- 3. Build the square image: pollinations background + SVG overlay ----------
 //
-// TEXT STYLE RULES (do not change without a reason):
+// TEXT STYLE + FRAMING RULES (do not change without a reason):
 // - Headline (top): big, bold, plain WHITE fill. No colored outline/stroke on the letters.
 //   Readability against busy backgrounds is handled with a soft dark drop-shadow behind the
-//   text (via the blurred duplicate layer below), not a stroke.
-// - Bottom bar (poll question + left/right options): large white text, bigger than before,
-//   sized to comfortably fit the dark bottom bar without overflowing.
+//   text (via feDropShadow), not a stroke.
+// - Bottom bar (poll question + left/right options): large white text, bigger than the old
+//   layout, but ALWAYS auto-fit so nothing is ever cut off or pushed outside the 1080x1080
+//   canvas:
+//     * Every text block is measured against a fixed max width for its slot.
+//     * If it doesn't fit at the target font size, it wraps onto more lines first.
+//     * If it still doesn't fit within the max allowed lines, the font size shrinks in
+//       steps until it does (down to a sensible minimum).
+//     * The top headline panel and bottom poll bar both resize themselves vertically to
+//       match however many lines the text actually wrapped to, so text is never clipped
+//       top/bottom either.
+//   Any future edit to fonts/sizes must keep this auto-fit approach — never hardcode a
+//   single font-size assuming the text will always be short.
 //
+function fitTextLines(text, { maxWidth, maxFontSize, minFontSize, maxLines, charWidthRatio = 0.58, step = 2 }) {
+  const words = String(text).trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return { fontSize: minFontSize, lines: [""] };
+
+  const wrapAt = (fontSize) => {
+    const maxCharsPerLine = Math.max(1, Math.floor(maxWidth / (fontSize * charWidthRatio)));
+    const lines = [];
+    let current = "";
+    for (const w of words) {
+      const candidate = current ? `${current} ${w}` : w;
+      if (candidate.length <= maxCharsPerLine || !current) {
+        current = candidate;
+      } else {
+        lines.push(current);
+        current = w;
+      }
+    }
+    if (current) lines.push(current);
+    return lines;
+  };
+
+  let fontSize = maxFontSize;
+  let lines = wrapAt(fontSize);
+  while (lines.length > maxLines && fontSize > minFontSize) {
+    fontSize -= step;
+    lines = wrapAt(fontSize);
+  }
+  return { fontSize, lines: lines.slice(0, Math.max(maxLines, lines.length)) };
+}
+
+function renderTspans(lines, x, lineHeight) {
+  return lines
+    .map((line, i) => `<tspan x="${x}" dy="${i === 0 ? 0 : lineHeight}">${line}</tspan>`)
+    .join("");
+}
+
 async function buildImage(pkg) {
   const scenePrompt = `${pkg.image_scene}, distressed Union Jack texture blended in, dark moody navy and British red palette, cinematic dramatic lighting, no text, no people, no logos, high detail`;
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(scenePrompt)}?width=1080&height=1080&nologo=true&seed=${Date.now() % 1000000}`;
@@ -129,6 +175,54 @@ async function buildImage(pkg) {
   const bgBuffer = Buffer.from(await bgResp.arrayBuffer());
 
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  // ---- HEADLINE: fit within a horizontal margin, up to 3 lines, shrinking font as needed ----
+  const headlineFit = fitTextLines(esc(pkg.headline), {
+    maxWidth: 940,
+    maxFontSize: 84,
+    minFontSize: 44,
+    maxLines: 3
+  });
+  const headlineLineHeight = Math.round(headlineFit.fontSize * 1.15);
+  const headlinePaddingTop = 70;
+  const headlinePaddingBottom = 40;
+  const headlineBlockHeight = Math.max(
+    240,
+    headlinePaddingTop + headlineFit.lines.length * headlineLineHeight + headlinePaddingBottom
+  );
+  const headlineFirstBaselineY = headlinePaddingTop;
+
+  // ---- BOTTOM BAR: poll question fits within margin, up to 2 lines, shrinking as needed ----
+  const pollFit = fitTextLines(esc(pkg.poll_question), {
+    maxWidth: 940,
+    maxFontSize: 46,
+    minFontSize: 28,
+    maxLines: 2
+  });
+  const pollLineHeight = Math.round(pollFit.fontSize * 1.15);
+  const buttonsRowHeight = 140; // fixed space reserved at the bottom of the bar for the option buttons
+  const pollPaddingTop = 60;
+  const bottomBarHeight = Math.max(
+    260,
+    pollPaddingTop + pollFit.lines.length * pollLineHeight + buttonsRowHeight
+  );
+  const bottomBarY = 1080 - bottomBarHeight;
+  const pollFirstBaselineY = bottomBarY + pollPaddingTop;
+  const buttonsRowY = 1080 - 105; // fixed distance from the bottom edge, regardless of bar height
+
+  // ---- LEFT / RIGHT OPTIONS: single line each, shrink to fit their half of the bar ----
+  const leftFit = fitTextLines(esc(pkg.left_option), {
+    maxWidth: 300,
+    maxFontSize: 42,
+    minFontSize: 24,
+    maxLines: 1
+  });
+  const rightFit = fitTextLines(esc(pkg.right_option), {
+    maxWidth: 300,
+    maxFontSize: 42,
+    minFontSize: 24,
+    maxLines: 1
+  });
 
   const overlaySvg = `
   <svg width="1080" height="1080" xmlns="http://www.w3.org/2000/svg">
@@ -141,27 +235,29 @@ async function buildImage(pkg) {
         <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#000000" flood-opacity="0.85"/>
       </filter>
     </defs>
-    <rect x="0" y="0" width="1080" height="280" fill="url(#topFade)"/>
+    <rect x="0" y="0" width="1080" height="${headlineBlockHeight}" fill="url(#topFade)"/>
 
-    <!-- HEADLINE: big, bold, plain white, no stroke/outline -->
-    <text x="540" y="110" font-family="Arial Black, Arial, sans-serif" font-size="84" font-weight="900"
-          fill="#ffffff" text-anchor="middle" filter="url(#headlineShadow)">${esc(pkg.headline)}</text>
+    <!-- HEADLINE: big, bold, plain white, no stroke/outline, auto-fit within the canvas -->
+    <text x="540" y="${headlineFirstBaselineY}" font-family="Arial Black, Arial, sans-serif"
+          font-size="${headlineFit.fontSize}" font-weight="900"
+          fill="#ffffff" text-anchor="middle" filter="url(#headlineShadow)">${renderTspans(headlineFit.lines, 540, headlineLineHeight)}</text>
 
-    <rect x="0" y="800" width="1080" height="280" rx="0" fill="#0d0d0dcc"/>
+    <rect x="0" y="${bottomBarY}" width="1080" height="${bottomBarHeight}" rx="0" fill="#0d0d0dcc"/>
 
-    <!-- BOTTOM BAR: bigger poll question + option text -->
-    <text x="540" y="870" font-family="Arial, sans-serif" font-size="46" font-weight="800"
-          fill="#ffffff" text-anchor="middle">${esc(pkg.poll_question)}</text>
+    <!-- BOTTOM BAR: poll question + options, auto-fit within the canvas -->
+    <text x="540" y="${pollFirstBaselineY}" font-family="Arial, sans-serif"
+          font-size="${pollFit.fontSize}" font-weight="800"
+          fill="#ffffff" text-anchor="middle">${renderTspans(pollFit.lines, 540, pollLineHeight)}</text>
 
-    <circle cx="220" cy="975" r="34" fill="#2f6fed"/>
-    <text x="220" y="988" font-family="Arial, sans-serif" font-size="32" text-anchor="middle">👍</text>
-    <text x="278" y="988" font-family="Arial, sans-serif" font-size="42" font-weight="800"
-          fill="#ffffff" text-anchor="start">${esc(pkg.left_option)}</text>
+    <circle cx="220" cy="${buttonsRowY}" r="34" fill="#2f6fed"/>
+    <text x="220" y="${buttonsRowY + 13}" font-family="Arial, sans-serif" font-size="32" text-anchor="middle">👍</text>
+    <text x="278" y="${buttonsRowY + 13}" font-family="Arial, sans-serif" font-size="${leftFit.fontSize}" font-weight="800"
+          fill="#ffffff" text-anchor="start">${leftFit.lines[0]}</text>
 
-    <text x="802" y="988" font-family="Arial, sans-serif" font-size="42" font-weight="800"
-          fill="#ffffff" text-anchor="end">${esc(pkg.right_option)}</text>
-    <circle cx="860" cy="975" r="34" fill="#e0457b"/>
-    <text x="860" y="988" font-family="Arial, sans-serif" font-size="32" text-anchor="middle">❤️</text>
+    <text x="802" y="${buttonsRowY + 13}" font-family="Arial, sans-serif" font-size="${rightFit.fontSize}" font-weight="800"
+          fill="#ffffff" text-anchor="end">${rightFit.lines[0]}</text>
+    <circle cx="860" cy="${buttonsRowY}" r="34" fill="#e0457b"/>
+    <text x="860" y="${buttonsRowY + 13}" font-family="Arial, sans-serif" font-size="32" text-anchor="middle">❤️</text>
   </svg>`;
 
   return sharp(bgBuffer)
