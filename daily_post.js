@@ -17,7 +17,7 @@ const FEEDS = [
 ];
 
 const PRIORITY = [
-  { tags: ["scandal", "resign", "minister", "pm ", "prime minister", "sleaze", "inquiry"], weight: 5 },
+  { tags: ["scandal", "resign", "minister", "pm ", "prime minister", "sleaze", "inquiry", "misled", "parliament"], weight: 5 },
   { tags: ["nhs", "hospital", "doctor", "nurse", "health service"], weight: 4 },
   { tags: ["cost of living", "energy bill", "inflation", "tax", "budget", "mortgage"], weight: 3 },
   { tags: ["migrant", "immigration", "asylum", "border"], weight: 2 },
@@ -58,7 +58,6 @@ async function pickTopStory() {
     }
   }
   if (allItems.length === 0) throw new Error("No RSS items fetched from any feed");
-
   allItems.sort((a, b) => scoreItem(b) - scoreItem(a));
   return allItems[0];
 }
@@ -72,8 +71,12 @@ Title: ${story.title}
 Description: ${story.description}
 
 Turn this into a post package. Rules:
-- Do NOT describe any real named person's face/likeness in image_scene. No real politicians, no logos, no rendered text in the scene.
-- image_scene must be SYMBOLIC/EDITORIAL only: objects, colors, textures, silhouettes, lighting that represent the story's theme (e.g. a cracked piggy bank, foggy hospital corridor, torn banknote, storm clouds over a skyline silhouette).
+- image_scene MUST create a dramatic political poster composition matching this exact style:
+  • Left side: a realistic, serious-looking British politician (or the main figure in the story) standing at a podium / speaking, three-quarter view, sharp suit, dramatic side lighting
+  • Right side: a large, shadowed, stern close-up face of another relevant older political figure or opposing figure
+  • Small secondary figure lower right if the story involves more than one person
+  • Dark moody background with heavy distressed Union Jack texture, cinematic high-contrast lighting, smoke/embers optional
+  • NO logos, NO text, NO watermarks inside the scene itself
 - Keep summary factual and neutral. Poll options must be 1-2 words each.
 
 Respond with ONLY raw JSON, no markdown fences, no preamble, in this exact shape:
@@ -88,7 +91,7 @@ Respond with ONLY raw JSON, no markdown fences, no preamble, in this exact shape
   "right_explain": "brief explanation of this position",
   "hashtags_main": ["#TheHonestBrit","#UKPolitics","#Topic1","#Topic2"],
   "hashtags_extra": ["#...", "up to 20 total discovery tags"],
-  "image_scene": "30-60 word symbolic visual description, no real people, no text, no logos"
+  "image_scene": "40-70 word detailed visual description of the dramatic political poster composition described above"
 }`;
 
   const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -100,9 +103,10 @@ Respond with ONLY raw JSON, no markdown fences, no preamble, in this exact shape
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
       messages: [{ role: "user", content: instruction }],
-      temperature: 0.8
+      temperature: 0.75
     })
   });
+
   if (!resp.ok) throw new Error(`Groq API error ${resp.status}: ${await resp.text()}`);
   const data = await resp.json();
   const text = data.choices?.[0]?.message?.content || "";
@@ -111,77 +115,77 @@ Respond with ONLY raw JSON, no markdown fences, no preamble, in this exact shape
   return JSON.parse(match[0]);
 }
 
-// ---------- 3. Build the image – "LOCKED AND LOADED" style with 👍 and ❤️ ----------
+// ---------- 3. Build the image – matches the uploaded style ----------
 async function buildImage(pkg) {
-  // Dark, dramatic background with subtle Union Jack texture
-  const scenePrompt = `${pkg.image_scene}, dark moody background with subtle distressed Union Jack texture, cinematic dramatic lighting, high contrast, no text, no people, no logos, photorealistic, 8k resolution`;
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(scenePrompt)}?width=1080&height=1080&nologo=true&seed=${Date.now() % 1000000}`;
+  // Force the exact visual language of the uploaded post
+  const scenePrompt = `${pkg.image_scene}, dark moody cinematic political poster, heavy distressed Union Jack flag texture in the background, dramatic high-contrast lighting, photorealistic, 8k, no text, no logos, no watermarks`;
 
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(scenePrompt)}?width=1080&height=1350&nologo=true&seed=${Date.now() % 1000000}`;
   const bgResp = await fetch(url);
   if (!bgResp.ok) throw new Error("pollinations fetch failed: " + bgResp.status);
   const bgBuffer = Buffer.from(await bgResp.arrayBuffer());
 
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+  // Layout matched to the uploaded example
   const overlaySvg = `
-  <svg width="1080" height="1080" xmlns="http://www.w3.org/2000/svg">
+  <svg width="1080" height="1350" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <linearGradient id="topFade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#000" stop-opacity="0.75"/>
-        <stop offset="1" stop-color="#000" stop-opacity="0.3"/>
+        <stop offset="0" stop-color="#000" stop-opacity="0.55"/>
+        <stop offset="0.35" stop-color="#000" stop-opacity="0.15"/>
+        <stop offset="1" stop-color="#000" stop-opacity="0"/>
       </linearGradient>
       <linearGradient id="bottomFade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#000" stop-opacity="0.3"/>
-        <stop offset="1" stop-color="#000" stop-opacity="0.75"/>
+        <stop offset="0" stop-color="#000" stop-opacity="0"/>
+        <stop offset="0.55" stop-color="#000" stop-opacity="0.4"/>
+        <stop offset="1" stop-color="#000" stop-opacity="0.85"/>
       </linearGradient>
     </defs>
 
-    <!-- Dark overlay to make text pop -->
-    <rect width="1080" height="1080" fill="rgba(0,0,0,0.5)"/>
+    <!-- Subtle dark overlays -->
+    <rect width="1080" height="1350" fill="url(#topFade)"/>
+    <rect width="1080" height="1350" fill="url(#bottomFade)"/>
 
-    <!-- Main headline (huge, centered, red outline) -->
-    <text x="540" y="380" font-family="Arial Black, Arial, sans-serif" font-size="90" font-weight="900"
-          fill="#ffffff" stroke="#c1122f" stroke-width="6" text-anchor="middle" textLength="960" lengthAdjust="spacing">
+    <!-- MAIN HEADLINE – huge, white, thick red outline (matches uploaded) -->
+    <text x="540" y="210" font-family="Arial Black, Impact, sans-serif" font-size="92" font-weight="900"
+          fill="#ffffff" stroke="#c1122f" stroke-width="8" text-anchor="middle"
+          textLength="980" lengthAdjust="spacingAndGlyphs">
       ${esc(pkg.headline)}
     </text>
 
-    <!-- Poll question (red, below headline) -->
-    <text x="540" y="520" font-family="Arial, sans-serif" font-size="44" font-weight="700"
-          fill="#ff4d4d" text-anchor="middle" textLength="960" lengthAdjust="spacing">
+    <!-- Bottom black rounded poll bar (exact style of uploaded post) -->
+    <rect x="60" y="1080" width="960" height="200" rx="28" ry="28" fill="#111111" fill-opacity="0.92"/>
+
+    <!-- Poll question inside the black bar -->
+    <text x="540" y="1155" font-family="Arial, sans-serif" font-size="36" font-weight="700"
+          fill="#ffffff" text-anchor="middle" textLength="880" lengthAdjust="spacing">
       ${esc(pkg.poll_question)}
     </text>
 
-    <!-- Left option: blue circle + 👍 + option text -->
-    <g transform="translate(160, 680)">
-      <circle cx="70" cy="70" r="50" fill="#2f6fed" stroke="#fff" stroke-width="4"/>
-      <text x="70" y="96" font-family="Arial, sans-serif" font-size="52" text-anchor="middle" fill="#fff">👍</text>
-      <text x="145" y="96" font-family="Arial, sans-serif" font-size="52" font-weight="700" fill="#ffffff">
-        ${esc(pkg.left_option)}
-      </text>
-    </g>
+    <!-- YES option (left) -->
+    <circle cx="280" cy="1225" r="32" fill="#2f6fed" stroke="#ffffff" stroke-width="3"/>
+    <text x="280" y="1238" font-family="Arial, sans-serif" font-size="34" text-anchor="middle" fill="#ffffff">👍</text>
+    <text x="340" y="1238" font-family="Arial Black, Arial, sans-serif" font-size="38" font-weight="800" fill="#ffffff">
+      ${esc(pkg.left_option)}
+    </text>
 
-    <!-- Right option: pink circle + ❤️ + option text -->
-    <g transform="translate(560, 680)">
-      <circle cx="70" cy="70" r="50" fill="#e0457b" stroke="#fff" stroke-width="4"/>
-      <text x="70" y="96" font-family="Arial, sans-serif" font-size="52" text-anchor="middle" fill="#fff">❤️</text>
-      <text x="145" y="96" font-family="Arial, sans-serif" font-size="52" font-weight="700" fill="#ffffff">
-        ${esc(pkg.right_option)}
-      </text>
-    </g>
-
-    <!-- Footer: "BE HONEST." brand mark -->
-    <text x="540" y="1040" font-family="Arial, sans-serif" font-size="32" font-weight="400"
-          fill="#aaaaaa" text-anchor="middle" letter-spacing="2">BE HONEST. 🇬🇧</text>
+    <!-- NO option (right) -->
+    <circle cx="680" cy="1225" r="32" fill="#e0457b" stroke="#ffffff" stroke-width="3"/>
+    <text x="680" y="1238" font-family="Arial, sans-serif" font-size="34" text-anchor="middle" fill="#ffffff">❤️</text>
+    <text x="740" y="1238" font-family="Arial Black, Arial, sans-serif" font-size="38" font-weight="800" fill="#ffffff">
+      ${esc(pkg.right_option)}
+    </text>
   </svg>`;
 
   return sharp(bgBuffer)
-    .resize(1080, 1080)
+    .resize(1080, 1350)
     .composite([{ input: Buffer.from(overlaySvg) }])
-    .jpeg({ quality: 92 })
+    .jpeg({ quality: 93 })
     .toBuffer();
 }
 
-// ---------- 4. Caption – matches the image icons and includes final "BE" ----------
+// ---------- 4. Caption ----------
 function buildCaption(pkg) {
   return `🇬🇧 BE HONEST.
 
@@ -203,7 +207,7 @@ BE
 ${pkg.hashtags_main.join(" ")}`;
 }
 
-// ---------- Dynamic posting time table (shows actual UK time when script runs) ----------
+// ---------- Dynamic posting time table ----------
 function postingTimeTable() {
   const now = new Date();
   const ukTime = now.toLocaleString('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -236,10 +240,9 @@ async function sendToTelegram(imageBuffer, pkg) {
   });
   if (!captionResp.ok) throw new Error("Telegram sendMessage (caption) failed: " + (await captionResp.text()));
 
-  // Message 2: extras (pinned tags + posting time)
+  // Message 2: extras
   const extraTags = pkg.hashtags_extra?.join(" ") || "";
   const extrasMsg = `🏷 Pinned comment tags:\n${extraTags}\n\n🕒 Posting time:\n${postingTimeTable()}`;
-
   const extrasResp = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -254,16 +257,15 @@ async function sendToTelegram(imageBuffer, pkg) {
   const story = await pickTopStory();
   console.log("Story:", story.title);
 
-  console.log("Writing post package (Groq, free)...");
+  console.log("Writing post package (Groq)...");
   const pkg = await writePostPackage(story);
   console.log("Headline:", pkg.headline);
 
-  console.log("Building image (pollinations, free)...");
+  console.log("Building image (Pollinations + SVG overlay matching your example)...");
   const image = await buildImage(pkg);
 
   console.log("Sending to Telegram...");
   await sendToTelegram(image, pkg);
-
   console.log("Done.");
 })().catch(err => {
   console.error(err);
