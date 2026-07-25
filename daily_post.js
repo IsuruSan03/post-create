@@ -64,23 +64,18 @@ async function pickTopStory() {
 
 // ---------- Groq ----------
 async function writePostPackage(story) {
-  const instruction = `You are writing for "The Honest Brit" – a bold UK political page.
+  const instruction = `You write for "The Honest Brit".
 
 Story:
 Title: ${story.title}
 Description: ${story.description}
 
-Rules (strict):
-- headline = maximum 4 words, ALL CAPS, extremely punchy (example style: "KEPT IN THE DARK?" or "TAX THE ELITE")
-- poll_question = short and clear (max 10-12 words)
-- left_option must be "YES"
-- right_option must be "NO"
-- image_scene must describe this EXACT composition only:
-  Left side: clear, well-lit British male politician in dark suit standing at a podium with microphone, three-quarter view, professional and serious
-  Right side: large dramatic close-up of an older male political face, heavily shadowed, filling the right half
-  Small secondary figure lower right
-  Heavy distressed Union Jack background, very dark cinematic mood
-  NO text, NO logos
+Strict rules:
+- headline = maximum 4 words, ALL CAPS, very punchy (examples: "KEPT IN THE DARK?", "TAX THE ELITE", "WHO PAYS?")
+- poll_question = short (max 9 words)
+- left_option = "YES"
+- right_option = "NO"
+- image_scene must be: Left = clear well-lit British politician at podium in dark suit. Right = large dramatic shadowed older political face. Heavy distressed Union Jack background. Dark cinematic lighting. No text, no logos.
 
 Return ONLY raw JSON:
 {
@@ -94,7 +89,7 @@ Return ONLY raw JSON:
   "right_explain": "brief",
   "hashtags_main": ["#TheHonestBrit","#UKPolitics","#Topic1","#Topic2"],
   "hashtags_extra": ["#tag1","#tag2"],
-  "image_scene": "60 word description of the exact left-podium + right-large-face composition"
+  "image_scene": "detailed description of left-podium + right-large-face composition"
 }`;
 
   const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -106,7 +101,7 @@ Return ONLY raw JSON:
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
       messages: [{ role: "user", content: instruction }],
-      temperature: 0.55
+      temperature: 0.5
     })
   });
 
@@ -118,56 +113,57 @@ Return ONLY raw JSON:
   return JSON.parse(match[0]);
 }
 
-// ---------- Image builder ----------
+// ---------- Image – typography focused ----------
 async function buildImage(pkg) {
-  // Stronger prompt + negative elements
-  const scenePrompt = `${pkg.image_scene}, dark cinematic political poster, heavy distressed Union Jack flag texture, dramatic high contrast lighting, sharp focus on faces, professional portrait quality, photorealistic, 8k --no text, no logos, no blurry faces, no cropped heads, no ugly faces, no deformed`;
+  const scenePrompt = `${pkg.image_scene}, dark cinematic political poster, heavy distressed Union Jack, dramatic lighting, sharp faces, photorealistic, 8k --no text, no logos, no blurry faces`;
 
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(scenePrompt)}?width=1080&height=1350&nologo=true&seed=${Date.now() % 1000000}`;
   const bgResp = await fetch(url);
-  if (!bgResp.ok) throw new Error("Image failed: " + bgResp.status);
+  if (!bgResp.ok) throw new Error("Image failed");
   const bgBuffer = Buffer.from(await bgResp.arrayBuffer());
 
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  // Safer SVG – no textLength overflow, larger safe zones
+  // Much larger & cleaner text
   const overlaySvg = `
 <svg width="1080" height="1350" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="top" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#000" stop-opacity="0.75"/>
-      <stop offset="40%" stop-color="#000" stop-opacity="0.2"/>
+      <stop offset="0%" stop-color="#000" stop-opacity="0.78"/>
+      <stop offset="38%" stop-color="#000" stop-opacity="0.18"/>
       <stop offset="100%" stop-color="#000" stop-opacity="0"/>
     </linearGradient>
     <linearGradient id="bot" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#000" stop-opacity="0"/>
-      <stop offset="45%" stop-color="#000" stop-opacity="0.55"/>
-      <stop offset="100%" stop-color="#000" stop-opacity="0.93"/>
+      <stop offset="42%" stop-color="#000" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.94"/>
     </linearGradient>
   </defs>
 
   <rect width="1080" height="1350" fill="url(#top)"/>
   <rect width="1080" height="1350" fill="url(#bot)"/>
 
-  <!-- HEADLINE - large, clean, white + red outline, safe margins -->
-  <text x="540" y="200"
+  <!-- ========== BIG CLEAN HEADLINE ========== -->
+  <!-- White fill + thick red outline (exactly like your target) -->
+  <text x="540" y="195"
         font-family="Arial Black, Impact, sans-serif"
-        font-size="82"
+        font-size="108"
         font-weight="900"
         fill="#FFFFFF"
         stroke="#C1122F"
-        stroke-width="9"
+        stroke-width="11"
+        stroke-linejoin="round"
         text-anchor="middle">
     ${esc(pkg.headline)}
   </text>
 
-  <!-- Bottom black bar -->
-  <rect x="50" y="1085" width="980" height="220" rx="32" ry="32" fill="#0f0f0f" fill-opacity="0.95"/>
+  <!-- ========== BOTTOM POLL BAR ========== -->
+  <rect x="45" y="1060" width="990" height="250" rx="34" ry="34" fill="#0d0d0d" fill-opacity="0.96"/>
 
-  <!-- Poll question - safe size -->
-  <text x="540" y="1165"
+  <!-- Larger poll question -->
+  <text x="540" y="1155"
         font-family="Arial, Helvetica, sans-serif"
-        font-size="32"
+        font-size="40"
         font-weight="700"
         fill="#FFFFFF"
         text-anchor="middle">
@@ -175,20 +171,20 @@ async function buildImage(pkg) {
   </text>
 
   <!-- YES -->
-  <circle cx="290" cy="1240" r="36" fill="#2F6FED" stroke="#FFFFFF" stroke-width="4"/>
-  <text x="290" y="1254" font-size="38" text-anchor="middle" fill="#FFFFFF">👍</text>
-  <text x="360" y="1254"
+  <circle cx="300" cy="1235" r="40" fill="#2F6FED" stroke="#FFFFFF" stroke-width="4"/>
+  <text x="300" y="1251" font-size="44" text-anchor="middle" fill="#FFFFFF">👍</text>
+  <text x="375" y="1251"
         font-family="Arial Black, Arial, sans-serif"
-        font-size="40"
+        font-size="46"
         font-weight="800"
         fill="#FFFFFF">YES</text>
 
   <!-- NO -->
-  <circle cx="690" cy="1240" r="36" fill="#E0457B" stroke="#FFFFFF" stroke-width="4"/>
-  <text x="690" y="1254" font-size="38" text-anchor="middle" fill="#FFFFFF">❤️</text>
-  <text x="760" y="1254"
+  <circle cx="700" cy="1235" r="40" fill="#E0457B" stroke="#FFFFFF" stroke-width="4"/>
+  <text x="700" y="1251" font-size="44" text-anchor="middle" fill="#FFFFFF">❤️</text>
+  <text x="775" y="1251"
         font-family="Arial Black, Arial, sans-serif"
-        font-size="40"
+        font-size="46"
         font-weight="800"
         fill="#FFFFFF">NO</text>
 </svg>`;
@@ -196,7 +192,7 @@ async function buildImage(pkg) {
   return sharp(bgBuffer)
     .resize(1080, 1350)
     .composite([{ input: Buffer.from(overlaySvg) }])
-    .jpeg({ quality: 93 })
+    .jpeg({ quality: 94 })
     .toBuffer();
 }
 
@@ -274,7 +270,7 @@ async function sendToTelegram(imageBuffer, pkg) {
   console.log("Building image...");
   const image = await buildImage(pkg);
 
-  console.log("Sending to Telegram...");
+  console.log("Sending...");
   await sendToTelegram(image, pkg);
   console.log("Done.");
 })().catch(err => {
