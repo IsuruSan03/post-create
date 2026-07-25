@@ -113,7 +113,8 @@ Respond with ONLY raw JSON, no markdown fences, no preamble, in this exact shape
 
 // ---------- 3. Build the square image: pollinations background + SVG overlay ----------
 async function buildImage(pkg) {
-  const scenePrompt = `${pkg.image_scene}, distressed Union Jack texture blended in, dark moody navy and British red palette, cinematic dramatic lighting, no text, no people, no logos, high detail`;
+  // Scene prompt tuned for dark, dramatic backgrounds (adds subtle Union Jack texture)
+  const scenePrompt = `${pkg.image_scene}, dark moody background with subtle distressed Union Jack texture, cinematic dramatic lighting, high contrast, no text, no people, no logos, photorealistic, 8k resolution`;
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(scenePrompt)}?width=1080&height=1080&nologo=true&seed=${Date.now() % 1000000}`;
 
   const bgResp = await fetch(url);
@@ -126,36 +127,59 @@ async function buildImage(pkg) {
   <svg width="1080" height="1080" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <linearGradient id="topFade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#000" stop-opacity="0.55"/>
-        <stop offset="1" stop-color="#000" stop-opacity="0"/>
+        <stop offset="0" stop-color="#000" stop-opacity="0.75"/>
+        <stop offset="1" stop-color="#000" stop-opacity="0.3"/>
+      </linearGradient>
+      <linearGradient id="bottomFade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#000" stop-opacity="0.3"/>
+        <stop offset="1" stop-color="#000" stop-opacity="0.75"/>
       </linearGradient>
     </defs>
-    <rect x="0" y="0" width="1080" height="260" fill="url(#topFade)"/>
-    <text x="540" y="90" font-family="Arial Black, Arial, sans-serif" font-size="70" font-weight="900"
-          fill="#ffffff" stroke="#c1122f" stroke-width="4" text-anchor="middle">${esc(pkg.headline)}</text>
 
-    <rect x="0" y="810" width="1080" height="270" rx="0" fill="#0d0d0dcc"/>
-    <text x="540" y="875" font-family="Arial, sans-serif" font-size="38" font-weight="700"
-          fill="#ffffff" text-anchor="middle">${esc(pkg.poll_question)}</text>
+    <!-- Dark overlay to make text pop over any background -->
+    <rect width="1080" height="1080" fill="rgba(0,0,0,0.5)"/>
 
-    <circle cx="230" cy="970" r="32" fill="#2f6fed"/>
-    <text x="230" y="982" font-family="Arial, sans-serif" font-size="30" text-anchor="middle">👍</text>
-    <text x="290" y="982" font-family="Arial, sans-serif" font-size="34" font-weight="700"
-          fill="#ffffff" text-anchor="start">${esc(pkg.left_option)}</text>
+    <!-- Main headline (huge, centered, red outline) -->
+    <text x="540" y="380" font-family="Arial Black, Arial, sans-serif" font-size="90" font-weight="900"
+          fill="#ffffff" stroke="#c1122f" stroke-width="6" text-anchor="middle" textLength="960" lengthAdjust="spacing">
+      ${esc(pkg.headline)}
+    </text>
 
-    <text x="790" y="982" font-family="Arial, sans-serif" font-size="34" font-weight="700"
-          fill="#ffffff" text-anchor="end">${esc(pkg.right_option)}</text>
-    <circle cx="850" cy="970" r="32" fill="#e0457b"/>
-    <text x="850" y="982" font-family="Arial, sans-serif" font-size="30" text-anchor="middle">❤️</text>
+    <!-- Poll question (red, slightly smaller) -->
+    <text x="540" y="520" font-family="Arial, sans-serif" font-size="44" font-weight="700"
+          fill="#ff4d4d" text-anchor="middle" textLength="960" lengthAdjust="spacing">
+      ${esc(pkg.poll_question)}
+    </text>
+
+    <!-- Left option: green check circle + option text -->
+    <g transform="translate(160, 680)">
+      <circle cx="70" cy="70" r="50" fill="#2ecc71" stroke="#fff" stroke-width="4"/>
+      <text x="70" y="96" font-family="Arial, sans-serif" font-size="72" text-anchor="middle" fill="#fff">✔</text>
+      <text x="145" y="96" font-family="Arial, sans-serif" font-size="52" font-weight="700" fill="#ffffff">
+        ${esc(pkg.left_option)}
+      </text>
+    </g>
+
+    <!-- Right option: red cross circle + option text -->
+    <g transform="translate(560, 680)">
+      <circle cx="70" cy="70" r="50" fill="#e74c3c" stroke="#fff" stroke-width="4"/>
+      <text x="70" y="96" font-family="Arial, sans-serif" font-size="72" text-anchor="middle" fill="#fff">✘</text>
+      <text x="145" y="96" font-family="Arial, sans-serif" font-size="52" font-weight="700" fill="#ffffff">
+        ${esc(pkg.right_option)}
+      </text>
+    </g>
+
+    <!-- Footer: "BE HONEST." brand mark -->
+    <text x="540" y="1040" font-family="Arial, sans-serif" font-size="32" font-weight="400"
+          fill="#aaaaaa" text-anchor="middle" letter-spacing="2">BE HONEST. 🇬🇧</text>
   </svg>`;
 
   return sharp(bgBuffer)
     .resize(1080, 1080)
     .composite([{ input: Buffer.from(overlaySvg) }])
-    .jpeg({ quality: 90 })
+    .jpeg({ quality: 92 })
     .toBuffer();
 }
-
 // ---------- 4. Caption text (for copy/paste onto Facebook) ----------
 function buildCaption(pkg) {
   return `🇬🇧 BE HONEST.
