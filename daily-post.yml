@@ -1,0 +1,25 @@
+name: Daily Honest Brit Post
+
+on:
+  schedule:
+    # 16:30 UTC ≈ 5:30 PM UK (BST) / 10:00 PM Sri Lanka. Adjust for winter (UK = UTC+0) if you want exact timing.
+    - cron: "30 16 * * *"
+  workflow_dispatch: {}   # lets you also trigger it manually from the Actions tab
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: npm install
+
+      - run: node daily_post.js
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

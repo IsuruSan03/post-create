@@ -1,0 +1,16 @@
+{
+  "name": "honestbrit-daily-post",
+  "version": "2.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node daily_post.js"
+  },
+  "dependencies": {
+    "sharp": "^0.33.5",
+    "fast-xml-parser": "^4.5.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
