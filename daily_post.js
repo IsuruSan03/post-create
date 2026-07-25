@@ -184,7 +184,7 @@ async function buildImage(pkg) {
     maxLines: 3
   });
   const headlineLineHeight = Math.round(headlineFit.fontSize * 1.15);
-  const headlinePaddingTop = 70;
+  const headlinePaddingTop = 130;
   const headlinePaddingBottom = 40;
   const headlineBlockHeight = Math.max(
     240,
