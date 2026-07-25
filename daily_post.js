@@ -9,7 +9,7 @@ if (!GROQ_KEY || !TG_TOKEN || !TG_CHAT_ID) {
   throw new Error("Missing GROQ_API_KEY / TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID env vars");
 }
 
-// ---------- 1. Pull real headlines ----------
+// ---------- 1. RSS ----------
 const FEEDS = [
   "https://feeds.bbci.co.uk/news/politics/rss.xml",
   "https://www.theguardian.com/politics/rss",
@@ -57,43 +57,41 @@ async function pickTopStory() {
       console.warn("Feed failed:", feed, e.message);
     }
   }
-  if (allItems.length === 0) throw new Error("No RSS items fetched from any feed");
+  if (allItems.length === 0) throw new Error("No RSS items fetched");
   allItems.sort((a, b) => scoreItem(b) - scoreItem(a));
   return allItems[0];
 }
 
-// ---------- 2. Groq writes the package ----------
+// ---------- 2. Groq ----------
 async function writePostPackage(story) {
-  const instruction = `You write posts for a UK political commentary page called "The Honest Brit".
+  const instruction = `You write posts for "The Honest Brit" – a direct UK political page.
 
-Today's real news story:
+Story:
 Title: ${story.title}
 Description: ${story.description}
 
-Create a post package. Rules for image_scene (VERY IMPORTANT):
-- Must describe a dramatic political poster composition exactly like this:
-  • Left side: a realistic British politician standing at a wooden podium, three-quarter view, speaking or looking serious, sharp dark suit, strong side lighting
-  • Right side: a large, close-up, heavily shadowed, stern older face of another relevant political figure filling most of the right half
-  • Optional small secondary figure visible in the lower right background
-  • Heavy distressed Union Jack flag texture across the entire background
-  • Extremely dark, moody, cinematic high-contrast lighting, slight smoke or ember effects allowed
-  • NO text, NO logos, NO watermarks inside the scene
-- Headline must be 3-6 words, ALL CAPS, punchy
-- Poll options = 1-2 words only
+Create the package. CRITICAL rules for image_scene:
+- Describe ONLY this exact composition:
+  Left half: a realistic British male politician in a dark suit standing at a wooden podium with a microphone, three-quarter view, looking slightly to the side or speaking, strong lighting on his face
+  Right half: a large, close-up, dramatic, heavily shadowed older male political face filling most of the right side
+  Lower right: a small, distant secondary figure of another man
+  Background: heavy distressed Union Jack flag texture, very dark and moody
+  Lighting: cinematic, high contrast, dramatic side light, slight atmospheric haze
+  NO text, NO logos, NO watermarks anywhere in the scene
 
-Respond with ONLY raw JSON, no markdown, no explanation:
+Respond with ONLY raw JSON:
 {
-  "headline": "3-6 words ALL CAPS",
+  "headline": "3-6 words ALL CAPS punchy",
   "summary": "2-3 factual sentences",
-  "quote_or_stat": "1-2 key sentences or figures",
-  "poll_question": "one clear binary question",
-  "left_option": "Yes or 1-2 words",
-  "left_explain": "short explanation",
-  "right_option": "No or 1-2 words",
-  "right_explain": "short explanation",
+  "quote_or_stat": "1-2 key details",
+  "poll_question": "clear binary question in ALL CAPS if possible",
+  "left_option": "YES",
+  "left_explain": "short reason",
+  "right_option": "NO",
+  "right_explain": "short reason",
   "hashtags_main": ["#TheHonestBrit","#UKPolitics","#Topic1","#Topic2"],
-  "hashtags_extra": ["#tag1", "#tag2", "... up to 20"],
-  "image_scene": "45-70 word detailed description of the exact left-podium + right-shadowed-face composition described above"
+  "hashtags_extra": ["#tag1","#tag2","..."],
+  "image_scene": "55-75 word description of the exact left-podium + right-large-shadowed-face composition above"
 }`;
 
   const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -105,95 +103,106 @@ Respond with ONLY raw JSON, no markdown, no explanation:
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
       messages: [{ role: "user", content: instruction }],
-      temperature: 0.7
+      temperature: 0.65
     })
   });
 
-  if (!resp.ok) throw new Error(`Groq API error ${resp.status}: ${await resp.text()}`);
+  if (!resp.ok) throw new Error(`Groq error ${resp.status}: ${await resp.text()}`);
   const data = await resp.json();
   const text = data.choices?.[0]?.message?.content || "";
   const match = text.replace(/```json|```/g, "").match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("Could not find JSON in model output:\n" + text);
+  if (!match) throw new Error("No JSON found:\n" + text);
   return JSON.parse(match[0]);
 }
 
-// ---------- 3. Build image – locked to your first example style ----------
+// ---------- 3. Image – locked to your target photo ----------
 async function buildImage(pkg) {
-  const scenePrompt = `${pkg.image_scene}, dark moody cinematic political poster style, heavy distressed Union Jack flag texture background, dramatic high-contrast side lighting, photorealistic, 8k, no text, no logos, no watermarks`;
+  const scenePrompt = `${pkg.image_scene}, dark cinematic political poster, heavy distressed Union Jack background, dramatic high-contrast lighting, photorealistic, 8k, no text, no logos`;
 
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(scenePrompt)}?width=1080&height=1350&nologo=true&seed=${Date.now() % 1000000}`;
   const bgResp = await fetch(url);
-  if (!bgResp.ok) throw new Error("pollinations fetch failed: " + bgResp.status);
+  if (!bgResp.ok) throw new Error("Image generation failed: " + bgResp.status);
   const bgBuffer = Buffer.from(await bgResp.arrayBuffer());
 
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  // Exact layout matching your first uploaded post
+  // This SVG is carefully matched to the proportions and style of your target image
   const overlaySvg = `
-  <svg width="1080" height="1350" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="topFade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#000" stop-opacity="0.65"/>
-        <stop offset="0.4" stop-color="#000" stop-opacity="0.2"/>
-        <stop offset="1" stop-color="#000" stop-opacity="0"/>
-      </linearGradient>
-      <linearGradient id="bottomFade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#000" stop-opacity="0"/>
-        <stop offset="0.5" stop-color="#000" stop-opacity="0.45"/>
-        <stop offset="1" stop-color="#000" stop-opacity="0.9"/>
-      </linearGradient>
-    </defs>
+<svg width="1080" height="1350" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="topDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#000" stop-opacity="0.7"/>
+      <stop offset="45%" stop-color="#000" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="bottomDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#000" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#000" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.92"/>
+    </linearGradient>
+  </defs>
 
-    <rect width="1080" height="1350" fill="url(#topFade)"/>
-    <rect width="1080" height="1350" fill="url(#bottomFade)"/>
+  <!-- Dark overlays for text readability -->
+  <rect width="1080" height="1350" fill="url(#topDark)"/>
+  <rect width="1080" height="1350" fill="url(#bottomDark)"/>
 
-    <!-- HEADLINE: pure white + thick red outline (matches your first post) -->
-    <text x="540" y="195"
-          font-family="Arial Black, Impact, sans-serif"
-          font-size="88" font-weight="900"
-          fill="#ffffff"
-          stroke="#c1122f" stroke-width="9"
-          text-anchor="middle"
-          textLength="960" lengthAdjust="spacingAndGlyphs">
-      ${esc(pkg.headline)}
-    </text>
+  <!-- ========== MAIN HEADLINE ========== -->
+  <!-- Pure white fill + thick red outline – exact match to target -->
+  <text x="540" y="210"
+        font-family="Arial Black, Impact, sans-serif"
+        font-size="96"
+        font-weight="900"
+        fill="#FFFFFF"
+        stroke="#C1122F"
+        stroke-width="10"
+        text-anchor="middle"
+        textLength="980"
+        lengthAdjust="spacingAndGlyphs">
+    ${esc(pkg.headline)}
+  </text>
 
-    <!-- Bottom black rounded poll bar -->
-    <rect x="50" y="1095" width="980" height="210" rx="32" ry="32" fill="#0d0d0d" fill-opacity="0.94"/>
+  <!-- ========== BOTTOM POLL BAR ========== -->
+  <rect x="40" y="1070" width="1000" height="240" rx="36" ry="36" fill="#111111" fill-opacity="0.95"/>
 
-    <!-- Full poll question -->
-    <text x="540" y="1175"
-          font-family="Arial, Helvetica, sans-serif"
-          font-size="34" font-weight="700"
-          fill="#ffffff"
-          text-anchor="middle"
-          textLength="900" lengthAdjust="spacing">
-      ${esc(pkg.poll_question)}
-    </text>
+  <!-- Poll question – large and clear -->
+  <text x="540" y="1160"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="38"
+        font-weight="700"
+        fill="#FFFFFF"
+        text-anchor="middle"
+        textLength="920"
+        lengthAdjust="spacing">
+    ${esc(pkg.poll_question)}
+  </text>
 
-    <!-- YES (left) – blue circle + 👍 -->
-    <circle cx="260" cy="1245" r="34" fill="#2f6fed" stroke="#ffffff" stroke-width="3.5"/>
-    <text x="260" y="1259" font-family="Arial" font-size="36" text-anchor="middle" fill="#ffffff">👍</text>
-    <text x="320" y="1259"
-          font-family="Arial Black, Arial, sans-serif"
-          font-size="40" font-weight="800" fill="#ffffff">
-      ${esc(pkg.left_option)}
-    </text>
+  <!-- YES button -->
+  <circle cx="280" cy="1245" r="38" fill="#2F6FED" stroke="#FFFFFF" stroke-width="4"/>
+  <text x="280" y="1260" font-size="42" text-anchor="middle" fill="#FFFFFF">👍</text>
+  <text x="350" y="1260"
+        font-family="Arial Black, Arial, sans-serif"
+        font-size="44"
+        font-weight="800"
+        fill="#FFFFFF">
+    ${esc(pkg.left_option)}
+  </text>
 
-    <!-- NO (right) – pink circle + ❤️ -->
-    <circle cx="680" cy="1245" r="34" fill="#e0457b" stroke="#ffffff" stroke-width="3.5"/>
-    <text x="680" y="1259" font-family="Arial" font-size="36" text-anchor="middle" fill="#ffffff">❤️</text>
-    <text x="740" y="1259"
-          font-family="Arial Black, Arial, sans-serif"
-          font-size="40" font-weight="800" fill="#ffffff">
-      ${esc(pkg.right_option)}
-    </text>
-  </svg>`;
+  <!-- NO button -->
+  <circle cx="700" cy="1245" r="38" fill="#E0457B" stroke="#FFFFFF" stroke-width="4"/>
+  <text x="700" y="1260" font-size="42" text-anchor="middle" fill="#FFFFFF">❤️</text>
+  <text x="770" y="1260"
+        font-family="Arial Black, Arial, sans-serif"
+        font-size="44"
+        font-weight="800"
+        fill="#FFFFFF">
+    ${esc(pkg.right_option)}
+  </text>
+</svg>`;
 
   return sharp(bgBuffer)
     .resize(1080, 1350)
     .composite([{ input: Buffer.from(overlaySvg) }])
-    .jpeg({ quality: 93 })
+    .jpeg({ quality: 94 })
     .toBuffer();
 }
 
@@ -219,7 +228,7 @@ BE
 ${pkg.hashtags_main.join(" ")}`;
 }
 
-// ---------- 5. Posting time table ----------
+// ---------- 5. Time table ----------
 function postingTimeTable() {
   const now = new Date();
   const ukTime = now.toLocaleString('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -230,7 +239,7 @@ function postingTimeTable() {
 | Sri Lanka (SLST) | ${sriTime} |`;
 }
 
-// ---------- 6. Send to Telegram ----------
+// ---------- 6. Telegram ----------
 async function sendToTelegram(imageBuffer, pkg) {
   const form = new FormData();
   form.append("chat_id", TG_CHAT_ID);
@@ -240,39 +249,39 @@ async function sendToTelegram(imageBuffer, pkg) {
     method: "POST",
     body: form
   });
-  if (!photoResp.ok) throw new Error("Telegram sendPhoto failed: " + (await photoResp.text()));
-
-  const caption = buildCaption(pkg);
+  if (!photoResp.ok) throw new Error("sendPhoto failed: " + await photoResp.text());
 
   await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: TG_CHAT_ID, text: caption })
+    body: JSON.stringify({ chat_id: TG_CHAT_ID, text: buildCaption(pkg) })
   });
 
   const extraTags = pkg.hashtags_extra?.join(" ") || "";
-  const extrasMsg = `🏷 Pinned comment tags:\n${extraTags}\n\n🕒 Posting time:\n${postingTimeTable()}`;
   await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: TG_CHAT_ID, text: extrasMsg })
+    body: JSON.stringify({
+      chat_id: TG_CHAT_ID,
+      text: `🏷 Pinned comment tags:\n${extraTags}\n\n🕒 Posting time:\n${postingTimeTable()}`
+    })
   });
 }
 
-// ---------- run ----------
+// ---------- Run ----------
 (async () => {
-  console.log("Reading RSS feeds...");
+  console.log("Fetching top story...");
   const story = await pickTopStory();
   console.log("Story:", story.title);
 
-  console.log("Writing post package...");
+  console.log("Writing package...");
   const pkg = await writePostPackage(story);
   console.log("Headline:", pkg.headline);
 
-  console.log("Building image (locked to your target style)...");
+  console.log("Building image (target style locked)...");
   const image = await buildImage(pkg);
 
-  console.log("Sending to Telegram...");
+  console.log("Sending...");
   await sendToTelegram(image, pkg);
   console.log("Done.");
 })().catch(err => {
