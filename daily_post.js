@@ -184,7 +184,7 @@ async function buildImage(pkg) {
     maxLines: 3
   });
   const headlineLineHeight = Math.round(headlineFit.fontSize * 1.15);
-  const headlinePaddingTop = 130;
+  const headlinePaddingTop = 240;
   const headlinePaddingBottom = 40;
   const headlineBlockHeight = Math.max(
     240,
@@ -195,8 +195,8 @@ async function buildImage(pkg) {
   // ---- BOTTOM BAR: poll question fits within margin, up to 2 lines, shrinking as needed ----
   const pollFit = fitTextLines(esc(pkg.poll_question), {
     maxWidth: 940,
-    maxFontSize: 46,
-    minFontSize: 28,
+    maxFontSize: 58,
+    minFontSize: 32,
     maxLines: 2
   });
   const pollLineHeight = Math.round(pollFit.fontSize * 1.15);
@@ -213,14 +213,14 @@ async function buildImage(pkg) {
   // ---- LEFT / RIGHT OPTIONS: single line each, shrink to fit their half of the bar ----
   const leftFit = fitTextLines(esc(pkg.left_option), {
     maxWidth: 300,
-    maxFontSize: 42,
-    minFontSize: 24,
+    maxFontSize: 52,
+    minFontSize: 28,
     maxLines: 1
   });
   const rightFit = fitTextLines(esc(pkg.right_option), {
     maxWidth: 300,
-    maxFontSize: 42,
-    minFontSize: 24,
+    maxFontSize: 52,
+    minFontSize: 28,
     maxLines: 1
   });
 
@@ -249,7 +249,7 @@ async function buildImage(pkg) {
           font-size="${pollFit.fontSize}" font-weight="800"
           fill="#ffffff" text-anchor="middle">${renderTspans(pollFit.lines, 540, pollLineHeight)}</text>
 
-    <circle cx="220" cy="${buttonsRowY}" r="34" fill="#2f6fed"/>
+    <circle cx="220" cy="${buttonsRowY}" r="34" fill="#ffcc00"/>
     <text x="220" y="${buttonsRowY + 13}" font-family="Arial, sans-serif" font-size="32" text-anchor="middle">👍</text>
     <text x="278" y="${buttonsRowY + 13}" font-family="Arial, sans-serif" font-size="${leftFit.fontSize}" font-weight="800"
           fill="#ffffff" text-anchor="start">${leftFit.lines[0]}</text>
